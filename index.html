@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body { 
+      font-size: 18px;
       display: flex;
-      flex-grow: 1;
       width: 100vw;
       height: 100vh;
       align-items: center;
@@ -11,7 +12,7 @@
       flex-direction: column;
     }
 
-    @keyframes wave-animation {
+    @keyframes wave {
       0% {
       transform: rotate( 0.0deg)
       }
@@ -39,8 +40,8 @@
     }
 
     .wave {
-      font-size: 60px;
-      animation-name: wave-animation;
+      font-size: 80px;
+      animation-name: wave;
       animation-duration: 3.0s;
       animation-iteration-count: infinite;
       transform-origin: 70% 70%;
@@ -49,7 +50,7 @@
   </style>
   <body> 
     <div class="wave">👋</div>
-    <div>under construction</div>
-    <div>perhaps, for now / maybe, forever</div>
+    <span>under construction</span>
+    <span>perhaps, for now / maybe, forever</span>
   </body>
 </html>
