@@ -1,9 +1,25 @@
+@font-face {
+  font-family: 'Junction';
+  src: url('/fonts/junction-bold.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Prociono';
+  src: url('/fonts/Prociono-Regular-webfont.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --color-bg: #FAF8F5;
   --color-text: #3A3A38;
   --color-text-muted: #7A7A78;
-  --font-display: 'Playfair Display', Georgia, serif;
-  --font-body: 'Inter', -apple-system, sans-serif;
+  --font-display: 'Junction', sans-serif;
+  --font-body: 'Prociono', Georgia, serif;
 }
 
 * {
@@ -126,6 +142,31 @@ body {
 
 .links a:hover {
   color: var(--color-text);
+}
+
+/* Font switcher (temporary testing) */
+#font-switcher {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 100;
+}
+
+#font-select {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-text-muted);
+  border-radius: 4px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+#font-select:hover {
+  opacity: 1;
 }
 
 /* Responsive */

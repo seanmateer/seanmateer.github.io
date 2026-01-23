@@ -122,14 +122,17 @@ const compositeFragmentShader = `
       rippleDistortion += dir * wave * 0.02;
     }
 
-    // Mouse proximity
+    // Mouse proximity - smooth magnetic pull toward cursor
     vec2 mouseDelta = (uv - uMouse) * aspect;
     float mouseDist = length(mouseDelta);
-    float mouseWave = sin(mouseDist * 15.0 - uTime * 2.5);
-    float mouseInfluence = smoothstep(0.35, 0.0, mouseDist) * 0.25;
-    totalRipple += mouseInfluence * (1.0 + mouseWave * 0.15);
+    float mouseInfluence = smoothstep(0.45, 0.0, mouseDist); // wider radius, smoother falloff
 
-    vec2 mouseDistortion = normalize(mouseDelta + 0.001) * mouseInfluence * 0.008;
+    // Subtle pattern reveal near cursor
+    float mouseWave = sin(mouseDist * 12.0 - uTime * 1.5) * 0.1;
+    totalRipple += mouseInfluence * 0.3 * (1.0 + mouseWave);
+
+    // Stronger magnetic pull distortion
+    vec2 mouseDistortion = normalize(mouseDelta + 0.001) * mouseInfluence * 0.015;
 
     // Combine distortions
     vec2 totalDistortion = baseDistortion + rippleDistortion + mouseDistortion;
@@ -168,12 +171,22 @@ interface Ripple {
   time: number;
 }
 
-const FONT_OPTIONS: Record<string, string> = {
-  'abril': 'Abril Fatface',
-  'bodoni': 'Bodoni Moda',
-  'fraunces': 'Fraunces',
-  'ultra': 'Ultra',
-  'playfair': 'Playfair Display'
+export const FONT_OPTIONS: Record<string, string> = {
+  'junction': 'Junction',
+  'junction-stroked': 'Junction (stroked)',
+  'oswald': 'Oswald',
+  'bebas': 'Bebas Neue',
+  'montserrat': 'Montserrat',
+  'poppins': 'Poppins'
+};
+
+const FONT_WEIGHTS: Record<string, number> = {
+  'junction': 700,
+  'junction-stroked': 700,
+  'oswald': 700,
+  'bebas': 400,
+  'montserrat': 900,
+  'poppins': 900
 };
 
 export class NameEffect {
@@ -198,9 +211,11 @@ export class NameEffect {
   private boundingRect: DOMRect | null = null;
   private nameSection: HTMLElement;
   private fontFamily: string;
+  private fontKey: string;
 
-  constructor(canvas: HTMLCanvasElement, nameSection: HTMLElement, fontKey: string = 'abril') {
-    this.fontFamily = FONT_OPTIONS[fontKey] || FONT_OPTIONS['abril'];
+  constructor(canvas: HTMLCanvasElement, nameSection: HTMLElement, fontKey: string = 'junction') {
+    this.fontKey = fontKey;
+    this.fontFamily = this.getFontFamily(fontKey);
     this.clock = new THREE.Clock();
     this.mouse = new THREE.Vector2(0.5, 0.5);
     this.targetMouse = new THREE.Vector2(0.5, 0.5);
@@ -272,6 +287,11 @@ export class NameEffect {
     this.setupEventListeners();
   }
 
+  private getFontFamily(key: string): string {
+    if (key === 'junction-stroked') return 'Junction';
+    return FONT_OPTIONS[key] || 'Junction';
+  }
+
   private renderTextMask(): void {
     const ctx = this.textCanvas.getContext('2d')!;
     const width = this.textCanvas.width;
@@ -288,7 +308,8 @@ export class NameEffect {
     // Large font size
     const vw = window.innerWidth * 0.01;
     const fontSize = Math.min(Math.max(22 * vw, 30 * vw), 38 * vw) * dpr;
-    ctx.font = `900 ${fontSize}px "${this.fontFamily}", Georgia, serif`;
+    const fontWeight = FONT_WEIGHTS[this.fontKey] || 700;
+    ctx.font = `${fontWeight} ${fontSize}px "${this.fontFamily}", sans-serif`;
 
     // Position - bottom left, Mateer bleeding off bottom
     const padding = 4 * 16 * dpr; // 4rem
@@ -297,6 +318,15 @@ export class NameEffect {
     // Position Mateer so bottom ~30% is cut off
     const mateerY = height + fontSize * 0.25;
     const sY = mateerY - lineHeight;
+
+    // Apply stroke for bolder effect if stroked variant
+    if (this.fontKey === 'junction-stroked') {
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = fontSize * 0.03; // 3% of font size
+      ctx.lineJoin = 'round';
+      ctx.strokeText('Mateer', padding, mateerY);
+      ctx.strokeText('S', padding, sY);
+    }
 
     ctx.fillText('Mateer', padding, mateerY);
     ctx.fillText('S', padding, sY);
@@ -331,12 +361,7 @@ export class NameEffect {
     const x = event.clientX / window.innerWidth;
     const y = 1.0 - event.clientY / window.innerHeight;
     this.targetMouse.set(x, y);
-
-    const now = this.clock.getElapsedTime();
-    const lastRipple = this.ripples[this.ripples.length - 1];
-    if (!lastRipple || now - lastRipple.time > 0.05) {
-      this.addRipple(x, y);
-    }
+    // Ripples no longer triggered on move - just smooth magnetic proximity effect
   }
 
   private addRipple(x: number, y: number): void {
@@ -383,6 +408,13 @@ export class NameEffect {
     };
 
     animate();
+  }
+
+  setFont(fontKey: string): void {
+    this.fontKey = fontKey;
+    this.fontFamily = this.getFontFamily(fontKey);
+    this.renderTextMask();
+    console.log('Switched to font:', this.fontFamily);
   }
 
   dispose(): void {
