@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sean Mateer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Font options to try: ?font=abril | bodoni | fraunces | ultra | playfair -->
+    <link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Bodoni+Moda:wght@900&family=Fraunces:wght@900&family=Ultra&family=Playfair+Display:wght@900&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="app">
+      <!-- WebGL canvas for name effect (full screen, behind content) -->
+      <canvas id="name-canvas"></canvas>
+
+      <!-- Content overlay -->
+      <div class="content-overlay">
+        <section class="bio">
+          <p>
+            Product designer working at the intersection of data and AI.
+            Currently at <span class="hover-trigger" data-image="hex">Hex</span>.
+            Based in <span class="hover-trigger" data-image="colorado">Colorado</span>.
+            Previously at <span class="hover-trigger" data-image="work">Figma</span> and
+            <span class="hover-trigger" data-image="work2">Google</span>.
+            Building tools that help people think better with data.
+          </p>
+        </section>
+
+        <footer class="links">
+          <a href="mailto:hello@seanmateer.com">Email</a>
+          <a href="https://twitter.com/seanmateer" target="_blank" rel="noopener">Twitter</a>
+          <a href="https://linkedin.com/in/seanmateer" target="_blank" rel="noopener">LinkedIn</a>
+        </footer>
+      </div>
+
+      <!-- Image reveal container -->
+      <div class="image-reveal" id="image-reveal">
+        <canvas id="image-canvas"></canvas>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
