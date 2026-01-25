@@ -23,7 +23,7 @@ function createFontSwitcher(nameEffect: NameEffect, currentFont: string): void {
 
 function getFontFromURL(): string {
   const params = new URLSearchParams(window.location.search);
-  return params.get('font') || 'junction';
+  return params.get('font') || 'junction-stroked';
 }
 
 function init(): void {
@@ -42,7 +42,7 @@ function init(): void {
   // Wait for fonts to load
   document.fonts.ready.then(() => {
     // Initialize name effect (WebGL ripple on S/Mateer)
-    const nameEffect = new NameEffect(nameCanvas, document.body, fontKey);
+    const nameEffect = new NameEffect(nameCanvas, fontKey);
     nameEffect.start();
 
     // Create font switcher for testing
