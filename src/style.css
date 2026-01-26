@@ -58,7 +58,7 @@ body {
   z-index: 1;
 }
 
-/* Content overlay - bio and links float above the canvas */
+/* Content overlay - centered bio and links */
 .content-overlay {
   position: relative;
   z-index: 2;
@@ -66,12 +66,21 @@ body {
   height: 100%;
   padding: 3rem 4rem;
   pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
 }
 
 /* Bio section */
 .bio {
-  max-width: 600px;
+  max-width: 500px;
   pointer-events: auto;
+
+  @media (max-width: 768px) {
+    max-width: 60vw;
+  }
 }
 
 .bio p {
@@ -121,12 +130,9 @@ body {
 
 /* Footer links */
 .links {
-  position: fixed;
-  top: 3rem;
-  right: 4rem;
   display: flex;
   gap: 2rem;
-  z-index: 10;
+  margin-top: 2rem;
   pointer-events: auto;
 }
 
@@ -142,31 +148,6 @@ body {
 
 .links a:hover {
   color: var(--color-text);
-}
-
-/* Font switcher (temporary testing) */
-#font-switcher {
-  position: fixed;
-  bottom: 2rem;
-  right: 2rem;
-  z-index: 100;
-}
-
-#font-select {
-  font-family: var(--font-body);
-  font-size: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-text-muted);
-  border-radius: 4px;
-  background: var(--color-bg);
-  color: var(--color-text);
-  cursor: pointer;
-  opacity: 0.6;
-  transition: opacity 0.2s ease;
-}
-
-#font-select:hover {
-  opacity: 1;
 }
 
 /* Responsive */
@@ -187,8 +168,6 @@ body {
   }
 
   .links {
-    top: 2rem;
-    right: 2rem;
     gap: 1.5rem;
   }
 }

@@ -67,8 +67,8 @@ const topoPatternShader = `
     vec2 p = uv * aspect;
     float t = uTime;
 
-    // Smooth terrain with multiple scales
-    vec2 topoCoord = p * 1.8 + vec2(2.0, 1.0);
+    // Smooth terrain with multiple scales (higher = smaller/denser pattern)
+    vec2 topoCoord = p * 2.25 + vec2(2.0, 1.0);
 
     // Layer smooth noise for organic feel
     float terrain = fbm(topoCoord, t) * 0.7;
@@ -78,7 +78,7 @@ const topoPatternShader = `
     terrain = terrain * 0.5 + 0.5;
 
     // Create crisp contour lines using gradient for anti-aliasing
-    float contourInterval = 0.04;
+    float contourInterval = 0.03;
     float contourPhase = terrain / contourInterval;
     float contourLine = fract(contourPhase);
 
@@ -257,19 +257,59 @@ const topoCompositeShader = `
     float solidFill = coreMask * (1.0 - dissolve * 1.5);
     solidFill = clamp(solidFill, 0.0, 1.0);
 
-    // Start with cream background
-    vec3 color = bgColor;
+    // Pattern colors - extract contour from pattern luminance
+    float patternLuminance = (pattern.r + pattern.g + pattern.b) / 3.0;
+    float contourPresence = 1.0 - smoothstep(0.3, 0.7, patternLuminance);
 
-    // Layer 1: Show topo pattern where the expanded/dissolved mask exists
-    color = mix(color, pattern.rgb, finalMask);
+    // Two color modes:
+    // - Background: dark/gray contour lines on cream
+    // - Text: cream contour lines on dark
+    vec3 darkOnCream = mix(textColor * 0.7, bgColor, contourPresence);
+    vec3 creamOnDark = mix(bgColor, textColor, contourPresence);
 
-    // Layer 2: Overlay remaining solid fill (fades as dissolve increases)
-    color = mix(color, textColor, solidFill);
+    // === POROUS BOUNDARY BLENDING ===
 
-    // Ambient spots - topo peeks through background with continuous pattern transition
-    float textPresence = max(textMask, finalMask);
+    // Sample at multiple radii to create smooth gradient falloff
+    float proximity1 = sampleExpandedMask(textUv, texelSize, 30.0);
+    float proximity2 = sampleExpandedMask(textUv, texelSize, 60.0);
+    float proximity3 = sampleExpandedMask(textUv, texelSize, 100.0);
 
-    // Calculate combined spot influence first
+    // Blend the proximity samples to create a smooth gradient
+    // Inner samples are stronger, outer samples create the fade
+    float textProximity = proximity1 * 0.6 + proximity2 * 0.3 + proximity3 * 0.1;
+
+    // Background pattern fades out gradually at its outer edge
+    float bgPatternFade = smoothstep(0.0, 0.5, textProximity);
+    float bgPatternStrength = mouseInfluence * bgPatternFade * 0.85;
+    vec3 bgLayer = mix(bgColor, darkOnCream, bgPatternStrength);
+
+    // === CURSOR RADIAL FADE ===
+    vec2 cursorDelta = (uv - uMouse) * aspect;
+    float cursorDist = length(cursorDelta);
+
+    // Fade radius - text starts fading at this distance from cursor
+    float fadeRadius = 0.25;
+    float fadeStrength = smoothstep(fadeRadius, 0.0, cursorDist);
+
+    // Near cursor, fade the text based on how close to the edge we are
+    float edgeDistance = 2.5 - smoothstep(0.0, 0.8, coreMask);
+    float cursorFade = fadeStrength * edgeDistance;
+
+    // Text visibility: reduced by cursor proximity fade
+    float textVisibility = finalMask * (1.0 - cursorFade * 0.9);
+    textVisibility = clamp(textVisibility, 0.0, 1.0);
+
+    // Text layer - at edges near cursor, blend toward background
+    vec3 textLayer = mix(creamOnDark, bgLayer, cursorFade * 0.7);
+
+    // Blend: background layer, then text pattern on top
+    vec3 color = mix(bgLayer, textLayer, textVisibility);
+
+    // Solid text core (fades with dissolve AND cursor proximity)
+    float adjustedSolidFill = solidFill * (1.0 - cursorFade * 0.8);
+    color = mix(color, textColor, adjustedSolidFill);
+
+    // === AMBIENT SPOTS ===
     float totalSpotInfluence = 0.0;
 
     for (int i = 0; i < 3; i++) {
@@ -279,12 +319,10 @@ const topoCompositeShader = `
       float spotBirth = uAmbientSpotTimes[i];
       float spotAge = uTime - spotBirth;
 
-      // Lifespan fade
       float fadeIn = smoothstep(0.0, 1.5, spotAge);
       float fadeOut = 1.0 - smoothstep(3.5, 5.0, spotAge);
       float spotFade = fadeIn * fadeOut;
 
-      // Organic amoeba shape
       vec2 delta = (uv - spotPos) * aspect;
       float dist = length(delta);
       float angle = atan(delta.y, delta.x);
@@ -307,35 +345,10 @@ const topoCompositeShader = `
       totalSpotInfluence = max(totalSpotInfluence, spotInfluence * spotFade);
     }
 
-    // Pattern colors - extract contour from pattern luminance
-    float patternLuminance = (pattern.r + pattern.g + pattern.b) / 3.0;
-    float contourPresence = 1.0 - smoothstep(0.3, 0.7, patternLuminance);
-
-    // Two color modes (contourPresence = 0 on lines, 1 on background):
-    // - Background (spots): dark/gray contour lines on cream
-    // - Text (reveal): cream contour lines on dark
-    vec3 darkOnCream = mix(textColor * 0.7, bgColor, contourPresence);  // dark on lines, cream on bg
-    vec3 creamOnDark = mix(bgColor, textColor, contourPresence);        // cream on lines, dark on bg
-
-    // Determine where we are relative to text boundary
-    float boundaryGradient = smoothstep(0.0, 0.3, textMask);
-
-    // When cursor is near AND spot is present, allow continuity
-    float cursorSpotInteraction = mouseInfluence * totalSpotInfluence;
-
-    // Base spot effect on background (masked by text presence)
-    float bgSpotStrength = totalSpotInfluence * (1.0 - textPresence) * 0.25;
-
-    // Continuous pattern effect when hovering near text with spot nearby
-    float continuousStrength = cursorSpotInteraction * 0.5;
-
-    // Apply background spots (dark lines on cream)
+    // Apply ambient spots to background areas
+    float textPresence = max(textMask, finalMask);
+    float bgSpotStrength = totalSpotInfluence * (1.0 - textPresence) * 0.3;
     color = mix(color, darkOnCream, bgSpotStrength);
-
-    // Apply continuous pattern transitioning into text
-    // Uses boundaryGradient to shift from darkOnCream to creamOnDark
-    vec3 transitionColor = mix(darkOnCream, creamOnDark, boundaryGradient);
-    color = mix(color, transitionColor, continuousStrength);
 
     gl_FragColor = vec4(color, 1.0);
   }
@@ -352,23 +365,11 @@ interface AmbientSpot {
   lifespan: number; // How long until it fully fades out
 }
 
-export const FONT_OPTIONS: Record<string, string> = {
-  'junction': 'Junction',
-  'junction-stroked': 'Junction (stroked)',
-  'oswald': 'Oswald',
-  'bebas': 'Bebas Neue',
-  'montserrat': 'Montserrat',
-  'poppins': 'Poppins'
-};
-
 const FONT_WEIGHTS: Record<string, number> = {
   'junction': 700,
-  'junction-stroked': 700,
-  'oswald': 700,
-  'bebas': 400,
-  'montserrat': 900,
-  'poppins': 900
+  'junction-stroked': 700
 };
+
 
 export class NameEffect {
   private renderer: THREE.WebGLRenderer;
@@ -479,9 +480,8 @@ export class NameEffect {
     this.setupEventListeners();
   }
 
-  private getFontFamily(key: string): string {
-    if (key === 'junction-stroked') return 'Junction';
-    return FONT_OPTIONS[key] || 'Junction';
+  private getFontFamily(_key: string): string {
+    return 'Junction';
   }
 
   private renderTextMask(): void {
@@ -494,41 +494,79 @@ export class NameEffect {
     ctx.fillRect(0, 0, width, height);
 
     ctx.fillStyle = '#FFFFFF';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-
     const fontWeight = FONT_WEIGHTS[this.fontKey] || 700;
-    const padding = 4 * 16 * dpr; // 4rem padding on each side
-    const availableWidth = width - (padding * 2);
 
-    // Measure "Mateer" at a reference size to calculate scale
-    const referenceSize = 100 * dpr;
-    ctx.font = `${fontWeight} ${referenceSize}px "${this.fontFamily}", sans-serif`;
-    const measuredWidth = ctx.measureText('Mateer').width;
-
-    // Scale font to fill available width
-    const fontSize = (availableWidth / measuredWidth) * referenceSize;
-    ctx.font = `${fontWeight} ${fontSize}px "${this.fontFamily}", sans-serif`;
-
-    const lineHeight = fontSize * 0.82;
-
-    // Position Mateer so bottom ~30% is cut off
-    const mateerY = height + fontSize * 0.25;
-    const sY = mateerY - lineHeight;
-
-    // Apply stroke for bolder effect if stroked variant
-    if (this.fontKey === 'junction-stroked') {
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = fontSize * 0.03;
-      ctx.lineJoin = 'round';
-      ctx.strokeText('Mateer', padding, mateerY);
-      ctx.strokeText('S', padding, sY);
-    }
-
-    ctx.fillText('Mateer', padding, mateerY);
-    ctx.fillText('S', padding, sY);
+    this.renderVerticalLayout(ctx, width, height, dpr, fontWeight);
 
     this.textTexture.needsUpdate = true;
+  }
+
+  private renderVerticalLayout(ctx: CanvasRenderingContext2D, width: number, height: number, dpr: number, fontWeight: number): void {
+    ctx.textBaseline = 'middle';
+
+    // Responsive scaling based on viewport width
+    const viewportWidth = width / dpr;
+    const isMobile = viewportWidth < 768;
+
+    // On mobile: smaller text (65% of height) and more cutoff (45%)
+    // On desktop: larger text (90% of height) and less cutoff (30%)
+    const heightScale = isMobile ? 0.45 : 0.8;
+    const cutoffPercent = isMobile ? 0.6 : 0.45;
+
+    // Calculate font size based on height
+    const referenceSize = 100 * dpr;
+    ctx.font = `${fontWeight} ${referenceSize}px "${this.fontFamily}", sans-serif`;
+
+    // Measure text width at reference size (which becomes height when rotated)
+    const seanWidth = ctx.measureText('Sean').width;
+    const mateerWidth = ctx.measureText('Mateer').width;
+
+    // Scale to fit target percentage of screen height
+    const targetHeight = height * heightScale;
+    const seanFontSize = (targetHeight / seanWidth) * referenceSize;
+    const mateerFontSize = (targetHeight / mateerWidth) * referenceSize;
+
+    // "Sean" on left side, running bottom to top
+    ctx.save();
+    ctx.font = `${fontWeight} ${seanFontSize}px "${this.fontFamily}", sans-serif`;
+
+    // Position: left edge minus cutoff percentage of the text height
+    const seanX = -seanFontSize * cutoffPercent;
+    const seanY = height / 2;
+
+    ctx.translate(seanX + seanFontSize * 0.5, seanY);
+    ctx.rotate(-Math.PI / 2); // Rotate -90 degrees (text reads bottom to top)
+    ctx.textAlign = 'center';
+
+    if (this.fontKey === 'junction-stroked') {
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = seanFontSize * 0.03;
+      ctx.lineJoin = 'round';
+      ctx.strokeText('Sean', 0, 0);
+    }
+    ctx.fillText('Sean', 0, 0);
+    ctx.restore();
+
+    // "Mateer" on right side, running top to bottom
+    ctx.save();
+    ctx.font = `${fontWeight} ${mateerFontSize}px "${this.fontFamily}", sans-serif`;
+
+    // Position: right edge plus cutoff percentage of the text height
+    const mateerX = width + mateerFontSize * cutoffPercent;
+    const mateerY = height / 2;
+
+    ctx.translate(mateerX - mateerFontSize * 0.5, mateerY);
+    ctx.rotate(Math.PI / 2); // Rotate 90 degrees (text reads top to bottom)
+    ctx.textAlign = 'center';
+
+    if (this.fontKey === 'junction-stroked') {
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = mateerFontSize * 0.03;
+      ctx.lineJoin = 'round';
+      ctx.strokeText('Mateer', 0, 0);
+    }
+    ctx.fillText('Mateer', 0, 0);
+    ctx.restore();
   }
 
   private setupEventListeners(): void {
@@ -686,13 +724,6 @@ export class NameEffect {
     };
 
     animate();
-  }
-
-  setFont(fontKey: string): void {
-    this.fontKey = fontKey;
-    this.fontFamily = this.getFontFamily(fontKey);
-    this.renderTextMask();
-    console.log('Switched to font:', this.fontFamily);
   }
 
   dispose(): void {
