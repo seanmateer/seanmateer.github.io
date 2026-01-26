@@ -52,7 +52,7 @@ const topoPatternShader = `
     float frequency = 1.0;
     vec2 drift = vec2(time * 0.012, time * 0.008);
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 4; i++) {
       value += amplitude * snoise(p * frequency + drift);
       amplitude *= 0.5;
       frequency *= 2.0;
@@ -152,8 +152,8 @@ const topoCompositeShader = `
   // Sample expanded mask - dilates the text boundary
   float sampleExpandedMask(vec2 uv, vec2 texelSize, float radius) {
     float maxVal = texture2D(uTextMask, uv).r;
-    // Sample in circle for smooth expansion
-    for (float a = 0.0; a < 6.28; a += 0.52) { // 12 samples
+    // Sample in circle for smooth expansion (8 samples at 45-degree intervals)
+    for (float a = 0.0; a < 6.28; a += 0.785) {
       vec2 offset = vec2(cos(a), sin(a)) * texelSize * radius;
       maxVal = max(maxVal, texture2D(uTextMask, uv + offset).r);
     }
@@ -329,18 +329,13 @@ const topoCompositeShader = `
       float spotOffset = float(i) * 17.3;
       float morphTime = uTime * 0.15 + spotOffset;
 
-      float blob1 = snoise(vec2(angle * 0.5 + morphTime, spotOffset)) * 0.5;
-      float blob2 = snoise(vec2(angle * 0.8 - morphTime * 0.6, spotOffset + 5.0)) * 0.3;
-      float blob3 = snoise(vec2(angle * 1.2 + morphTime * 0.4, spotOffset + 10.0)) * 0.2;
-      float boundaryNoise = blob1 + blob2 + blob3;
+      // Simplified organic boundary with single noise call
+      float boundaryNoise = snoise(vec2(angle * 0.6 + morphTime, spotOffset)) * 0.7;
 
       float baseRadius = 0.14;
-      float organicRadius = baseRadius + boundaryNoise * 0.06;
+      float organicRadius = baseRadius + boundaryNoise * 0.05;
       float edgeSoftness = 0.06;
       float spotInfluence = smoothstep(organicRadius + edgeSoftness, organicRadius - edgeSoftness * 0.5, dist);
-
-      float internalNoise = snoise(uv * 4.0 + vec2(morphTime * 0.5, spotOffset)) * 0.5 + 0.5;
-      spotInfluence *= mix(0.7, 1.0, internalNoise);
 
       totalSpotInfluence = max(totalSpotInfluence, spotInfluence * spotFade);
     }
@@ -353,11 +348,6 @@ const topoCompositeShader = `
     gl_FragColor = vec4(color, 1.0);
   }
 `;
-
-interface Ripple {
-  position: THREE.Vector2;
-  time: number;
-}
 
 interface AmbientSpot {
   position: THREE.Vector2;
@@ -389,33 +379,33 @@ export class NameEffect {
 
   private mouse: THREE.Vector2;
   private targetMouse: THREE.Vector2;
-  private ripples: Ripple[] = [];
   private ambientSpots: AmbientSpot[] = [];
   private nextSpotTime: number = 0;
   private fontFamily: string;
   private fontKey: string;
   private resizeTimeout: number | null = null;
+  private readonly dpr: number;
 
   constructor(canvas: HTMLCanvasElement, fontKey: string = 'junction') {
     this.fontKey = fontKey;
-    this.fontFamily = this.getFontFamily(fontKey);
+    this.fontFamily = 'Junction'; // Only Junction font is used
     this.clock = new THREE.Clock();
     this.mouse = new THREE.Vector2(0.5, 0.5);
     this.targetMouse = new THREE.Vector2(0.5, 0.5);
+    this.dpr = Math.min(window.devicePixelRatio, 2);
 
     const width = window.innerWidth;
     const height = window.innerHeight;
-    const dpr = Math.min(window.devicePixelRatio, 2);
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
       alpha: false
     });
-    this.renderer.setPixelRatio(dpr);
+    this.renderer.setPixelRatio(this.dpr);
     this.renderer.setSize(width, height);
 
-    this.patternTarget = new THREE.WebGLRenderTarget(width * dpr, height * dpr);
+    this.patternTarget = new THREE.WebGLRenderTarget(width * this.dpr, height * this.dpr);
 
     // Pattern scene
     this.patternScene = new THREE.Scene();
@@ -432,8 +422,8 @@ export class NameEffect {
 
     // Text mask
     this.textCanvas = document.createElement('canvas');
-    this.textCanvas.width = width * dpr;
-    this.textCanvas.height = height * dpr;
+    this.textCanvas.width = width * this.dpr;
+    this.textCanvas.height = height * this.dpr;
     this.textTexture = new THREE.CanvasTexture(this.textCanvas);
     this.textTexture.minFilter = THREE.LinearFilter;
     this.textTexture.magFilter = THREE.LinearFilter;
@@ -480,15 +470,10 @@ export class NameEffect {
     this.setupEventListeners();
   }
 
-  private getFontFamily(_key: string): string {
-    return 'Junction';
-  }
-
   private renderTextMask(): void {
     const ctx = this.textCanvas.getContext('2d')!;
     const width = this.textCanvas.width;
     const height = this.textCanvas.height;
-    const dpr = Math.min(window.devicePixelRatio, 2);
 
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, width, height);
@@ -496,16 +481,16 @@ export class NameEffect {
     ctx.fillStyle = '#FFFFFF';
     const fontWeight = FONT_WEIGHTS[this.fontKey] || 700;
 
-    this.renderVerticalLayout(ctx, width, height, dpr, fontWeight);
+    this.renderVerticalLayout(ctx, width, height, fontWeight);
 
     this.textTexture.needsUpdate = true;
   }
 
-  private renderVerticalLayout(ctx: CanvasRenderingContext2D, width: number, height: number, dpr: number, fontWeight: number): void {
+  private renderVerticalLayout(ctx: CanvasRenderingContext2D, width: number, height: number, fontWeight: number): void {
     ctx.textBaseline = 'middle';
 
     // Responsive scaling based on viewport width
-    const viewportWidth = width / dpr;
+    const viewportWidth = width / this.dpr;
     const isMobile = viewportWidth < 768;
 
     // On mobile: smaller text (65% of height) and more cutoff (45%)
@@ -514,7 +499,7 @@ export class NameEffect {
     const cutoffPercent = isMobile ? 0.6 : 0.45;
 
     // Calculate font size based on height
-    const referenceSize = 100 * dpr;
+    const referenceSize = 100 * this.dpr;
     ctx.font = `${fontWeight} ${referenceSize}px "${this.fontFamily}", sans-serif`;
 
     // Measure text width at reference size (which becomes height when rotated)
@@ -594,19 +579,18 @@ export class NameEffect {
   private reinitialize(): void {
     const width = window.innerWidth;
     const height = window.innerHeight;
-    const dpr = Math.min(window.devicePixelRatio, 2);
 
     // Update renderer size
     this.renderer.setSize(width, height);
 
     // Dispose old render target and create new one
     this.patternTarget.dispose();
-    this.patternTarget = new THREE.WebGLRenderTarget(width * dpr, height * dpr);
+    this.patternTarget = new THREE.WebGLRenderTarget(width * this.dpr, height * this.dpr);
 
     // Dispose old text texture and create new one
     this.textTexture.dispose();
-    this.textCanvas.width = width * dpr;
-    this.textCanvas.height = height * dpr;
+    this.textCanvas.width = width * this.dpr;
+    this.textCanvas.height = height * this.dpr;
     this.textTexture = new THREE.CanvasTexture(this.textCanvas);
     this.textTexture.minFilter = THREE.LinearFilter;
     this.textTexture.magFilter = THREE.LinearFilter;
@@ -623,53 +607,33 @@ export class NameEffect {
     const x = event.clientX / window.innerWidth;
     const y = 1.0 - event.clientY / window.innerHeight;
     this.targetMouse.set(x, y);
-    // Ripples no longer triggered on move - just smooth magnetic proximity effect
-  }
-
-  private addRipple(x: number, y: number): void {
-    const time = this.clock.getElapsedTime();
-    this.ripples.push({ position: new THREE.Vector2(x, y), time });
-
-    this.ripples = this.ripples.filter(r => time - r.time < 2.5);
-    if (this.ripples.length > 10) {
-      this.ripples = this.ripples.slice(-10);
-    }
-
-    const positions = this.compositeMaterial.uniforms.uRipples.value as THREE.Vector2[];
-    const times = this.compositeMaterial.uniforms.uRippleTimes.value as number[];
-
-    for (let i = 0; i < 10; i++) {
-      if (i < this.ripples.length) {
-        positions[i].copy(this.ripples[i].position);
-        times[i] = this.ripples[i].time;
-      } else {
-        times[i] = -10;
-      }
-    }
-    this.compositeMaterial.uniforms.uRippleCount.value = this.ripples.length;
   }
 
   private updateAmbientSpots(time: number): void {
-    // Remove expired spots (lifespan is 5 seconds total: 1s fade in, 3s hold, 1s fade out)
-    this.ambientSpots = this.ambientSpots.filter(spot => time - spot.birthTime < 5.0);
+    let spotsChanged = false;
+
+    // Remove expired spots only if any could have expired
+    const prevCount = this.ambientSpots.length;
+    if (prevCount > 0) {
+      // Check oldest spot first (they expire in order)
+      if (time - this.ambientSpots[0].birthTime >= 5.0) {
+        this.ambientSpots = this.ambientSpots.filter(spot => time - spot.birthTime < 5.0);
+        spotsChanged = this.ambientSpots.length !== prevCount;
+      }
+    }
 
     // Spawn new spots if we have fewer than 2-3 and it's time
-    const maxSpots = 2 + Math.floor(Math.random() * 2); // 2-3 spots
-    if (this.ambientSpots.length < maxSpots && time >= this.nextSpotTime) {
+    if (this.ambientSpots.length < 3 && time >= this.nextSpotTime) {
       // Random position, avoiding center where text likely is
-      // Prefer edges and corners
       let x: number, y: number;
       const region = Math.random();
       if (region < 0.4) {
-        // Right side
         x = 0.6 + Math.random() * 0.35;
         y = Math.random();
       } else if (region < 0.7) {
-        // Top area
         x = Math.random();
         y = 0.6 + Math.random() * 0.35;
       } else {
-        // Bottom right corner
         x = 0.5 + Math.random() * 0.45;
         y = Math.random() * 0.4;
       }
@@ -679,25 +643,28 @@ export class NameEffect {
         birthTime: time,
         lifespan: 5.0
       });
+      spotsChanged = true;
 
       // Next spot spawns in 2-4 seconds
       this.nextSpotTime = time + 2.0 + Math.random() * 2.0;
     }
 
-    // Update uniforms
-    const positions = this.compositeMaterial.uniforms.uAmbientSpots.value as THREE.Vector2[];
-    const times = this.compositeMaterial.uniforms.uAmbientSpotTimes.value as number[];
+    // Only update uniforms when spots actually changed
+    if (spotsChanged) {
+      const positions = this.compositeMaterial.uniforms.uAmbientSpots.value as THREE.Vector2[];
+      const times = this.compositeMaterial.uniforms.uAmbientSpotTimes.value as number[];
 
-    for (let i = 0; i < 3; i++) {
-      if (i < this.ambientSpots.length) {
-        positions[i].copy(this.ambientSpots[i].position);
-        times[i] = this.ambientSpots[i].birthTime;
-      } else {
-        positions[i].set(-10, -10);
-        times[i] = -100;
+      for (let i = 0; i < 3; i++) {
+        if (i < this.ambientSpots.length) {
+          positions[i].copy(this.ambientSpots[i].position);
+          times[i] = this.ambientSpots[i].birthTime;
+        } else {
+          positions[i].set(-10, -10);
+          times[i] = -100;
+        }
       }
+      this.compositeMaterial.uniforms.uAmbientSpotCount.value = this.ambientSpots.length;
     }
-    this.compositeMaterial.uniforms.uAmbientSpotCount.value = this.ambientSpots.length;
   }
 
   start(): void {
