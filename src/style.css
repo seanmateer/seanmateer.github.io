@@ -127,6 +127,10 @@ body {
 
 /* Responsive */
 @media (max-width: 768px) {
+  #name-canvas {
+    display: none;
+  }
+
   .content-overlay {
     padding: 2rem;
   }
