@@ -496,7 +496,7 @@ export class NameEffect {
 
     ctx.textBaseline = 'middle';
 
-    const heightScale = 0.8;
+    const heightScale = 0.7;
     const cutoffPercent = 0.45;
 
     // Calculate font size based on height
