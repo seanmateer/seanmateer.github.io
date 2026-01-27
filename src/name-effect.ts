@@ -487,16 +487,17 @@ export class NameEffect {
   }
 
   private renderVerticalLayout(ctx: CanvasRenderingContext2D, width: number, height: number, fontWeight: number): void {
-    ctx.textBaseline = 'middle';
-
     // Responsive scaling based on viewport width
     const viewportWidth = width / this.dpr;
     const isMobile = viewportWidth < 768;
 
-    // On mobile: smaller text (65% of height) and more cutoff (45%)
-    // On desktop: larger text (90% of height) and less cutoff (30%)
-    const heightScale = isMobile ? 0.45 : 0.8;
-    const cutoffPercent = isMobile ? 0.6 : 0.45;
+    // On mobile, skip text rendering - just show the background pattern
+    if (isMobile) return;
+
+    ctx.textBaseline = 'middle';
+
+    const heightScale = 0.8;
+    const cutoffPercent = 0.45;
 
     // Calculate font size based on height
     const referenceSize = 100 * this.dpr;
