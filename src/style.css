@@ -75,7 +75,7 @@ body {
 
 /* Bio section */
 .bio {
-  max-width: 500px;
+  max-width: 550px;
   pointer-events: auto;
 
   @media (max-width: 768px) {
