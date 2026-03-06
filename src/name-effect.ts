@@ -487,12 +487,10 @@ export class NameEffect {
   }
 
   private renderVerticalLayout(ctx: CanvasRenderingContext2D, width: number, height: number, fontWeight: number): void {
-    // Responsive scaling based on viewport width
-    const viewportWidth = width / this.dpr;
-    const isMobile = viewportWidth < 768;
+    const hideText = true
 
-    // On mobile, skip text rendering - just show the background pattern
-    if (isMobile) return;
+    // For now, name is hidden all the time
+    if (hideText) return;
 
     ctx.textBaseline = 'middle';
 
